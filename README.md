@@ -2,7 +2,7 @@
 
 Compare two CSV files row by row, matched by a key column, and see exactly what was added, removed and changed. Useful for checking a new data export against last month's, reviewing changes to a lookup table, or testing that a pipeline still produces the same output.
 
-Pure Python, no dependencies.
+Works with CSV and Excel (.xlsx) files. Pure Python; reading Excel needs `openpyxl`.
 
 ```
 $ csvdiff examples/employees_jan.csv examples/employees_feb.csv --key id
@@ -22,6 +22,8 @@ Rows are matched by key, so row order does not matter.
 
 ```bash
 pip install git+https://github.com/Ifazawezk/csvdiff.git
+# with Excel support:
+pip install "csvdiff-cli[excel] @ git+https://github.com/Ifazawezk/csvdiff.git"
 ```
 
 ## Usage
@@ -35,6 +37,8 @@ csvdiff a.csv b.csv -k id --ignore-case --ignore-whitespace
 csvdiff a.csv b.csv -k id --format json > changes.json
 csvdiff a.csv b.csv -k id --format markdown                 # paste into a PR or issue
 csvdiff a.csv b.csv -k id --summary                         # just the counts
+csvdiff january.xlsx february.xlsx -k id --sheet Payroll    # Excel files
+csvdiff export.xlsx export.csv -k id                        # or one of each
 ```
 
 | Option | |
@@ -47,6 +51,7 @@ csvdiff a.csv b.csv -k id --summary                         # just the counts
 | `-f, --format` | `text` (default), `json` or `markdown` |
 | `-s, --summary` | only print the counts |
 | `--delimiter` | field delimiter; detected automatically (`,` `;` tab `\|`) if not given |
+| `--sheet` | for .xlsx files, the sheet to read (default: the first) |
 | `--encoding` | file encoding, default UTF-8 with or without a BOM (Excel exports work) |
 | `--color` | `auto`, `always` or `never` |
 
@@ -101,6 +106,7 @@ for change in d.changed:
 
 - Only columns present in both files are compared. Added or removed columns are reported separately.
 - Duplicate keys are treated as an error, since a diff by key would be ambiguous. Use a composite key if one column is not unique.
+- Excel values are compared as text: whole numbers lose the `.0` Excel adds, and dates become `YYYY-MM-DD`. Header names are trimmed.
 - Both files are loaded into memory, which is fine for files up to a few hundred MB.
 
 ## Development
