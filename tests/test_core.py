@@ -73,3 +73,22 @@ def test_load_csv_handles_bom(tmp_path):
     p.write_bytes("﻿id,name\n1,Ali\n".encode("utf-8"))
     header, _ = load_csv(p)
     assert header == ["id", "name"]
+
+
+def test_compare_options():
+    from csvdiff.core import CompareOptions
+
+    old = [{"id": "1", "name": "Ali Hassan", "price": "10.004", "updated": "mon"}]
+    new = [{"id": "1", "name": "  ali   hassan ", "price": "10.00", "updated": "tue"}]
+    assert len(diff_rows(old, new, ["id"]).changed[0].cells) == 3
+
+    opts = CompareOptions(ignore_columns=("updated",), tolerance=0.01, ignore_case=True, ignore_whitespace=True)
+    assert diff_rows(old, new, ["id"], opts).is_empty
+
+
+def test_tolerance_handles_thousands_separators():
+    from csvdiff.core import CompareOptions
+
+    assert CompareOptions(tolerance=0.5).same("1,000.2", "1000")
+    assert not CompareOptions(tolerance=0.5).same("1,000.2", "1001")
+    assert not CompareOptions(tolerance=0.5).same("abc", "abd")

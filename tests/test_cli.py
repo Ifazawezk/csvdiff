@@ -31,3 +31,10 @@ def test_cli_errors_exit_2(tmp_path, capsys):
     assert main([a, a, "-k", "email"]) == 2
     err = capsys.readouterr().err
     assert "missing.csv" in err and "email" in err
+
+
+def test_cli_options(tmp_path, capsys):
+    old = write(tmp_path / "old.csv", "id,name,price,updated\n1,Ali,10.004,mon\n")
+    new = write(tmp_path / "new.csv", "id,name,price,updated\n1,ALI,10.00,tue\n")
+    assert main([old, new, "-k", "id"]) == 1
+    assert main([old, new, "-k", "id", "--ignore", "updated", "-t", "0.01", "--ignore-case"]) == 0

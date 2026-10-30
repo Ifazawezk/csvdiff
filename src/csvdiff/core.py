@@ -18,6 +18,38 @@ class Change:
 
 
 @dataclass
+class CompareOptions:
+    ignore_columns: tuple[str, ...] = ()
+    # Numbers within this absolute difference count as equal (e.g. 0.01 for rounding).
+    tolerance: float = 0.0
+    ignore_case: bool = False
+    # Ignore leading/trailing spaces and repeated inner spaces.
+    ignore_whitespace: bool = False
+
+    def same(self, a: str, b: str) -> bool:
+        if a == b:
+            return True
+        if self.ignore_whitespace:
+            a, b = " ".join(a.split()), " ".join(b.split())
+        if self.ignore_case:
+            a, b = a.casefold(), b.casefold()
+        if a == b:
+            return True
+        if self.tolerance:
+            x, y = _to_number(a), _to_number(b)
+            if x is not None and y is not None:
+                return abs(x - y) <= self.tolerance + 1e-12
+        return False
+
+
+def _to_number(s: str) -> float | None:
+    try:
+        return float(s.strip().replace(",", ""))
+    except ValueError:
+        return None
+
+
+@dataclass
 class Diff:
     key_columns: list[str]
     added: list[Row] = field(default_factory=list)
@@ -59,14 +91,16 @@ def _index(rows: list[Row], key_columns: list[str], label: str) -> dict[Key, Row
     return index
 
 
-def diff_rows(old: list[Row], new: list[Row], key_columns: list[str]) -> Diff:
+def diff_rows(old: list[Row], new: list[Row], key_columns: list[str],
+              options: CompareOptions | None = None) -> Diff:
     """Match rows by key_columns and compare the columns both files share."""
+    opts = options or CompareOptions()
     old_idx = _index(old, key_columns, "old file")
     new_idx = _index(new, key_columns, "new file")
 
     old_cols = list(old[0]) if old else []
     new_cols = list(new[0]) if new else []
-    shared = [c for c in old_cols if c in new_cols and c not in key_columns]
+    shared = [c for c in old_cols if c in new_cols and c not in key_columns and c not in opts.ignore_columns]
 
     d = Diff(
         key_columns=key_columns,
@@ -81,7 +115,7 @@ def diff_rows(old: list[Row], new: list[Row], key_columns: list[str]) -> Diff:
             d.removed.append(row)
             continue
         other = new_idx[key]
-        cells = {c: (row[c], other[c]) for c in shared if row[c] != other[c]}
+        cells = {c: (row[c], other[c]) for c in shared if not opts.same(row[c], other[c])}
         if cells:
             d.changed.append(Change(key, cells))
     return d

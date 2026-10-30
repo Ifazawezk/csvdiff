@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from csvdiff.core import DuplicateKeyError, Diff, diff_rows, load_csv
+from csvdiff.core import CompareOptions, DuplicateKeyError, Diff, diff_rows, load_csv
 
 
 def format_text(d: Diff, color: bool = False) -> str:
@@ -39,12 +39,22 @@ def _row_preview(row: dict, key_columns: list[str], limit: int = 80) -> str:
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
+def _split(value: str) -> list[str]:
+    return [v.strip() for v in value.split(",") if v.strip()]
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="csvdiff", description="Compare two CSV files by key.")
     p.add_argument("old", help="the original CSV file")
     p.add_argument("new", help="the updated CSV file")
     p.add_argument("-k", "--key", required=True,
                    help="key column(s) that identify a row, comma separated, e.g. id or year,month")
+    p.add_argument("-i", "--ignore", default="", help="columns to skip when comparing, comma separated")
+    p.add_argument("-t", "--tolerance", type=float, default=0.0,
+                   help="treat numbers within this difference as equal, e.g. 0.01")
+    p.add_argument("--ignore-case", action="store_true", help="compare text case-insensitively")
+    p.add_argument("--ignore-whitespace", action="store_true",
+                   help="ignore leading, trailing and repeated spaces")
     p.add_argument("--encoding", default="utf-8-sig", help="file encoding (default utf-8 with or without BOM)")
     p.add_argument("--delimiter", help="field delimiter (default: detected)")
     p.add_argument("--color", choices=["auto", "always", "never"], default="auto")
@@ -53,11 +63,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    keys = [k.strip() for k in args.key.split(",") if k.strip()]
+    keys = _split(args.key)
+    opts = CompareOptions(
+        ignore_columns=tuple(_split(args.ignore)),
+        tolerance=args.tolerance,
+        ignore_case=args.ignore_case,
+        ignore_whitespace=args.ignore_whitespace,
+    )
     try:
         _, old = load_csv(args.old, args.encoding, args.delimiter)
         _, new = load_csv(args.new, args.encoding, args.delimiter)
-        d = diff_rows(old, new, keys)
+        d = diff_rows(old, new, keys, opts)
     except (OSError, KeyError, DuplicateKeyError, UnicodeDecodeError) as e:
         msg = e.args[0] if isinstance(e, KeyError) else e
         print(f"csvdiff: {msg}", file=sys.stderr)
