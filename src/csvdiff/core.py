@@ -1,4 +1,5 @@
 import csv
+import datetime as dt
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -61,6 +62,47 @@ class Diff:
     @property
     def is_empty(self) -> bool:
         return not (self.added or self.removed or self.changed or self.columns_added or self.columns_removed)
+
+
+def load_xlsx(path: str | Path, sheet: str | None = None) -> tuple[list[str], list[Row]]:
+    """Read one sheet of an Excel file into (header, rows), with every value as text."""
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        raise ImportError("reading .xlsx files needs openpyxl: pip install openpyxl") from None
+    wb = load_workbook(path, read_only=True, data_only=True)
+    ws = wb[sheet] if sheet else wb.worksheets[0]
+    rows_iter = ws.iter_rows(values_only=True)
+    first = next(rows_iter, None) or ()
+    header = [str(h).strip() if h is not None else "" for h in first]
+    rows = []
+    for values in rows_iter:
+        if values is None or all(v is None for v in values):
+            continue
+        rows.append({h: _cell_text(v) for h, v in zip(header, values)})
+    wb.close()
+    return header, rows
+
+
+def _cell_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))  # Excel stores 42 as 42.0
+    if isinstance(value, dt.datetime):
+        # Excel has no separate date type, so midnight usually means "just a date".
+        return value.date().isoformat() if value.time() == dt.time() else value.isoformat(sep=" ")
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    return str(value)
+
+
+def load_table(path: str | Path, encoding: str = "utf-8-sig", delimiter: str | None = None,
+               sheet: str | None = None) -> tuple[list[str], list[Row]]:
+    """Read a .csv/.tsv/.txt or .xlsx file."""
+    if str(path).lower().endswith((".xlsx", ".xlsm")):
+        return load_xlsx(path, sheet)
+    return load_csv(path, encoding, delimiter)
 
 
 def load_csv(path: str | Path, encoding: str = "utf-8-sig", delimiter: str | None = None) -> tuple[list[str], list[Row]]:

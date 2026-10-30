@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 
-from csvdiff.core import CompareOptions, DuplicateKeyError, Diff, diff_rows, load_csv
+from csvdiff.core import CompareOptions, DuplicateKeyError, Diff, diff_rows, load_table
 
 
 def format_text(d: Diff, color: bool = False) -> str:
@@ -112,6 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="ignore leading, trailing and repeated spaces")
     p.add_argument("--encoding", default="utf-8-sig", help="file encoding (default utf-8 with or without BOM)")
     p.add_argument("--delimiter", help="field delimiter (default: detected)")
+    p.add_argument("--sheet", help="for .xlsx files: sheet name (default: the first sheet)")
     p.add_argument("-f", "--format", choices=["text", "json", "markdown"], default="text")
     p.add_argument("-s", "--summary", action="store_true", help="only print the counts")
     p.add_argument("--color", choices=["auto", "always", "never"], default="auto")
@@ -128,10 +129,10 @@ def main(argv: list[str] | None = None) -> int:
         ignore_whitespace=args.ignore_whitespace,
     )
     try:
-        _, old = load_csv(args.old, args.encoding, args.delimiter)
-        _, new = load_csv(args.new, args.encoding, args.delimiter)
+        _, old = load_table(args.old, args.encoding, args.delimiter, args.sheet)
+        _, new = load_table(args.new, args.encoding, args.delimiter, args.sheet)
         d = diff_rows(old, new, keys, opts)
-    except (OSError, KeyError, DuplicateKeyError, UnicodeDecodeError) as e:
+    except (OSError, KeyError, DuplicateKeyError, UnicodeDecodeError, ImportError) as e:
         msg = e.args[0] if isinstance(e, KeyError) else e
         print(f"csvdiff: {msg}", file=sys.stderr)
         return 2
