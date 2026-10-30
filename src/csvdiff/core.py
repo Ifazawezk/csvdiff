@@ -74,8 +74,11 @@ def load_csv(path: str | Path, encoding: str = "utf-8-sig", delimiter: str | Non
             except csv.Error:
                 delimiter = ","
         reader = csv.DictReader(f, delimiter=delimiter)
+        # Exports from Excel and some databases often pad header names with spaces.
+        header = [h.strip() for h in reader.fieldnames or []]
+        reader.fieldnames = header
         rows = [dict(r) for r in reader]
-        return list(reader.fieldnames or []), rows
+        return header, rows
 
 
 def _index(rows: list[Row], key_columns: list[str], label: str) -> dict[Key, Row]:

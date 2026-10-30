@@ -92,3 +92,11 @@ def test_tolerance_handles_thousands_separators():
     assert CompareOptions(tolerance=0.5).same("1,000.2", "1000")
     assert not CompareOptions(tolerance=0.5).same("1,000.2", "1001")
     assert not CompareOptions(tolerance=0.5).same("abc", "abd")
+
+
+def test_load_csv_strips_header_spaces(tmp_path):
+    p = tmp_path / "padded.csv"
+    p.write_text(" id , name \n1,Ali\n", encoding="utf-8")
+    header, rows = load_csv(p)
+    assert header == ["id", "name"]
+    assert rows == [{"id": "1", "name": "Ali"}]
