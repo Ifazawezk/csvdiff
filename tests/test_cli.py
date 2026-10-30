@@ -1,0 +1,33 @@
+from csvdiff.cli import main
+
+
+def write(path, text):
+    path.write_text(text, encoding="utf-8")
+    return str(path)
+
+
+def test_cli_reports_and_exits_1(tmp_path, capsys):
+    old = write(tmp_path / "old.csv", "id,name,salary\n1,Ali,9000\n2,Sara,7000\n")
+    new = write(tmp_path / "new.csv", "id,name,salary\n1,Ali,9500\n3,Omar,8000\n")
+    code = main([old, new, "--key", "id", "--color", "never"])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "+ id=3  name=Omar, salary=8000" in out
+    assert "- id=2  name=Sara, salary=7000" in out
+    assert "~ id=1" in out
+    assert "salary: '9000' -> '9500'" in out
+    assert out.strip().endswith("1 added, 1 removed, 1 changed")
+
+
+def test_cli_identical_exits_0(tmp_path, capsys):
+    a = write(tmp_path / "a.csv", "id,x\n1,2\n")
+    assert main([a, a, "-k", "id"]) == 0
+    assert "0 added, 0 removed, 0 changed" in capsys.readouterr().out
+
+
+def test_cli_errors_exit_2(tmp_path, capsys):
+    a = write(tmp_path / "a.csv", "id,x\n1,2\n")
+    assert main([a, str(tmp_path / "missing.csv"), "-k", "id"]) == 2
+    assert main([a, a, "-k", "email"]) == 2
+    err = capsys.readouterr().err
+    assert "missing.csv" in err and "email" in err
