@@ -25,7 +25,7 @@ def format_text(d: Diff, color: bool = False) -> str:
             lines.append(f"    {col}: {old!r} -> {new!r}")
     lines.append(
         f"{len(d.added)} added, {len(d.removed)} removed, {len(d.changed)} changed"
-        + (f", {len(d.columns_added)} columns added, {len(d.columns_removed)} removed"
+        + (f"; columns: {len(d.columns_added)} added, {len(d.columns_removed)} removed"
            if d.columns_added or d.columns_removed else "")
     )
     return "\n".join(lines)
