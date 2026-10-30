@@ -38,3 +38,35 @@ def test_cli_options(tmp_path, capsys):
     new = write(tmp_path / "new.csv", "id,name,price,updated\n1,ALI,10.00,tue\n")
     assert main([old, new, "-k", "id"]) == 1
     assert main([old, new, "-k", "id", "--ignore", "updated", "-t", "0.01", "--ignore-case"]) == 0
+
+
+def _pair(tmp_path):
+    old = write(tmp_path / "old.csv", "id,name,salary\n1,Ali,9000\n2,Sara,7000\n")
+    new = write(tmp_path / "new.csv", "id,name,salary\n1,Ali,9500\n3,Omar,8000\n")
+    return old, new
+
+
+def test_json_output(tmp_path, capsys):
+    import json
+
+    old, new = _pair(tmp_path)
+    main([old, new, "-k", "id", "-f", "json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["summary"] == {"added": 1, "removed": 1, "changed": 1, "columns_added": [], "columns_removed": []}
+    assert data["changed"][0] == {"key": {"id": "1"}, "cells": {"salary": {"old": "9000", "new": "9500"}}}
+    assert data["added"][0]["name"] == "Omar"
+
+
+def test_markdown_output(tmp_path, capsys):
+    old, new = _pair(tmp_path)
+    main([old, new, "-k", "id", "-f", "markdown"])
+    out = capsys.readouterr().out
+    assert out.startswith("**1 added, 1 removed, 1 changed**")
+    assert "| 3 | Omar | 8000 |" in out
+    assert "| 1 | salary | 9000 | 9500 |" in out
+
+
+def test_summary_only(tmp_path, capsys):
+    old, new = _pair(tmp_path)
+    main([old, new, "-k", "id", "--summary"])
+    assert capsys.readouterr().out.strip() == "1 added, 1 removed, 1 changed"

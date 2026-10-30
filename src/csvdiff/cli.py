@@ -1,6 +1,7 @@
 """Command-line interface: csvdiff OLD.csv NEW.csv --key id"""
 
 import argparse
+import json
 import sys
 
 from csvdiff.core import CompareOptions, DuplicateKeyError, Diff, diff_rows, load_csv
@@ -30,6 +31,60 @@ def format_text(d: Diff, color: bool = False) -> str:
     return "\n".join(lines)
 
 
+def summary(d: Diff) -> dict:
+    return {
+        "added": len(d.added),
+        "removed": len(d.removed),
+        "changed": len(d.changed),
+        "columns_added": d.columns_added,
+        "columns_removed": d.columns_removed,
+    }
+
+
+def format_json(d: Diff) -> str:
+    data = {
+        "key": d.key_columns,
+        "summary": summary(d),
+        "added": d.added,
+        "removed": d.removed,
+        "changed": [
+            {
+                "key": dict(zip(d.key_columns, ch.key)),
+                "cells": {col: {"old": old, "new": new} for col, (old, new) in ch.cells.items()},
+            }
+            for ch in d.changed
+        ],
+    }
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+def _md(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
+
+
+def format_markdown(d: Diff) -> str:
+    """A report that renders nicely in a pull request or GitHub issue."""
+    s = summary(d)
+    lines = [f"**{s['added']} added, {s['removed']} removed, {s['changed']} changed**", ""]
+    if d.columns_added or d.columns_removed:
+        lines += [f"Columns added: {', '.join(d.columns_added) or 'none'}. "
+                  f"Columns removed: {', '.join(d.columns_removed) or 'none'}.", ""]
+    for title, rows in (("Added", d.added), ("Removed", d.removed)):
+        if rows:
+            cols = list(rows[0])
+            lines += [f"### {title}", "", "| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
+            lines += ["| " + " | ".join(_md(r.get(c, "")) for c in cols) + " |" for r in rows]
+            lines.append("")
+    if d.changed:
+        lines += ["### Changed", "", "| " + " | ".join(d.key_columns) + " | column | old | new |",
+                  "|" + "---|" * (len(d.key_columns) + 3)]
+        for ch in d.changed:
+            for col, (old, new) in ch.cells.items():
+                lines.append("| " + " | ".join(_md(k) for k in ch.key) + f" | {col} | {_md(old)} | {_md(new)} |")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 def _key_label(d: Diff, row: dict) -> str:
     return ", ".join(f"{k}={row[k]}" for k in d.key_columns)
 
@@ -57,6 +112,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="ignore leading, trailing and repeated spaces")
     p.add_argument("--encoding", default="utf-8-sig", help="file encoding (default utf-8 with or without BOM)")
     p.add_argument("--delimiter", help="field delimiter (default: detected)")
+    p.add_argument("-f", "--format", choices=["text", "json", "markdown"], default="text")
+    p.add_argument("-s", "--summary", action="store_true", help="only print the counts")
     p.add_argument("--color", choices=["auto", "always", "never"], default="auto")
     return p
 
@@ -79,8 +136,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"csvdiff: {msg}", file=sys.stderr)
         return 2
 
-    color = args.color == "always" or (args.color == "auto" and sys.stdout.isatty())
-    print(format_text(d, color))
+    if args.summary and args.format == "json":
+        print(json.dumps(summary(d), indent=2))
+    elif args.summary:
+        print(format_text(d).splitlines()[-1])
+    elif args.format == "json":
+        print(format_json(d))
+    elif args.format == "markdown":
+        print(format_markdown(d))
+    else:
+        color = args.color == "always" or (args.color == "auto" and sys.stdout.isatty())
+        print(format_text(d, color))
     return 0 if d.is_empty else 1
 
 
