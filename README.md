@@ -44,18 +44,18 @@ csvdiff export.xlsx export.csv -k id                        # or one of each
 | Option | |
 |---|---|
 | `-k, --key` | column(s) that identify a row, comma separated (required) |
-| `-i, --ignore` | columns to leave out of the comparison |
+| `-i, --ignore` | columns to leave out of the comparison, including when they are added or removed |
 | `-t, --tolerance` | numbers within this difference count as equal; thousands separators are handled |
 | `--ignore-case` | compare text case-insensitively |
 | `--ignore-whitespace` | ignore leading, trailing and repeated spaces |
 | `-f, --format` | `text` (default), `json` or `markdown` |
 | `-s, --summary` | only print the counts |
-| `--delimiter` | field delimiter; detected automatically (`,` `;` tab `\|`) if not given |
+| `--delimiter` | field delimiter, one character or `\t` for a tab; detected automatically (`,` `;` tab `\|`) if not given |
 | `--sheet` | for .xlsx files, the sheet to read (default: the first) |
 | `--encoding` | file encoding, default UTF-8 with or without a BOM (Excel exports work) |
 | `--color` | `auto`, `always` or `never` |
 
-**Exit codes:** `0` when the files match, `1` when there are differences, `2` on errors such as a missing file, a missing key column or a duplicate key. That makes it easy to use in scripts and CI:
+**Exit codes:** `0` when the files match, `1` when there are differences, `2` on errors such as a missing file, a missing key column, a duplicate key or a row that does not fit the header. That makes it easy to use in scripts and CI:
 
 ```bash
 csvdiff expected.csv output.csv -k id --summary || echo "output changed"
@@ -95,19 +95,23 @@ Columns added: manager. Columns removed: none.
 ```python
 from csvdiff import CompareOptions, diff_rows, load_csv
 
-_, old = load_csv("jan.csv")
-_, new = load_csv("feb.csv")
-d = diff_rows(old, new, ["id"], CompareOptions(tolerance=0.01))
+old_columns, old = load_csv("jan.csv")
+new_columns, new = load_csv("feb.csv")
+d = diff_rows(old, new, ["id"], CompareOptions(tolerance=0.01),
+              old_columns=old_columns, new_columns=new_columns)
 for change in d.changed:
     print(change.key, change.cells)
 ```
 
 ## Notes
 
-- Only columns present in both files are compared. Added or removed columns are reported separately.
-- Duplicate keys are treated as an error, since a diff by key would be ambiguous. Use a composite key if one column is not unique.
-- Excel values are compared as text: whole numbers lose the `.0` Excel adds, and dates become `YYYY-MM-DD`. Header names are trimmed.
+- Only columns present in both files are compared. Added or removed columns are reported separately, based on each file's header, so a file with a header and no rows still compares correctly.
+- Duplicate keys are treated as an error, since a diff by key would be ambiguous. Use a composite key if one column is not unique. A column name that appears twice in a header is an error for the same reason.
+- A row shorter than the header is read with empty values for the missing cells. Blank rows, including the `,,,` rows Excel writes when saving as CSV, are skipped.
+- A CSV row with values past the last column is an error that names the file and line, because the cells of that row have probably shifted (an unquoted comma, for example). Extra empty fields from a trailing delimiter are fine.
+- Excel values are compared as text: whole numbers lose the `.0` Excel adds, and dates become `YYYY-MM-DD`. Header names are trimmed. Cells to the right of the last named column are outside the table and are left out.
 - Both files are loaded into memory, which is fine for files up to a few hundred MB.
+- Output is always UTF-8, including when it is piped or redirected to a file on Windows.
 
 ## Development
 
