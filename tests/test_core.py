@@ -1,6 +1,6 @@
 import pytest
 
-from csvdiff.core import DuplicateKeyError, diff_rows, load_csv
+from csvdiff.core import DuplicateKeyError, TableError, diff_rows, load_csv
 
 
 OLD = [
@@ -93,6 +93,80 @@ def test_load_csv_handles_bom(tmp_path):
     p.write_bytes("﻿id,name\n1,Ali\n".encode("utf-8"))
     header, _ = load_csv(p)
     assert header == ["id", "name"]
+
+
+def csv_file(tmp_path, text):
+    p = tmp_path / "data.csv"
+    p.write_text(text, encoding="utf-8", newline="")
+    return p
+
+
+def test_short_rows_get_empty_values(tmp_path):
+    _, rows = load_csv(csv_file(tmp_path, "id,name,salary\n1,Ali\n2\n"))
+    assert rows == [{"id": "1", "name": "Ali", "salary": ""}, {"id": "2", "name": "", "salary": ""}]
+
+
+def test_short_rows_compare_with_every_option(tmp_path):
+    from csvdiff.core import CompareOptions
+
+    _, short = load_csv(csv_file(tmp_path, "id,name,salary\n1,Ali\n"))
+    full = [{"id": "1", "name": "Ali", "salary": "9000"}]
+    for opts in (CompareOptions(), CompareOptions(tolerance=0.01), CompareOptions(ignore_whitespace=True),
+                 CompareOptions(ignore_case=True)):
+        assert diff_rows(full, short, ["id"], opts).changed[0].cells == {"salary": ("9000", "")}
+
+
+def test_row_with_too_many_fields_names_the_file_and_line(tmp_path):
+    p = csv_file(tmp_path, "id,city,salary\n1,Doha,9000\n2,Doha, Qatar,7000\n")
+    with pytest.raises(TableError, match=r"line 3: 4 fields but the header has 3") as e:
+        load_csv(p)
+    assert str(p) in str(e.value)
+
+
+def test_trailing_delimiters_are_not_extra_fields(tmp_path):
+    header, rows = load_csv(csv_file(tmp_path, "id,name\n1,Ali,\n2,Sara,,  ,\n"))
+    assert header == ["id", "name"]
+    assert rows == [{"id": "1", "name": "Ali"}, {"id": "2", "name": "Sara"}]
+
+
+def test_empty_columns_at_the_end_of_the_header_are_dropped(tmp_path):
+    header, rows = load_csv(csv_file(tmp_path, "id,name,,\n1,Ali,,\n"))
+    assert header == ["id", "name"]
+    assert rows == [{"id": "1", "name": "Ali"}]
+
+
+def test_value_under_an_empty_header_cell_is_not_lost(tmp_path):
+    with pytest.raises(TableError, match="line 2"):
+        load_csv(csv_file(tmp_path, "id,name,\n1,Ali,note\n"))
+
+
+def test_blank_rows_are_skipped(tmp_path):
+    _, rows = load_csv(csv_file(tmp_path, "\n\nid,name\n1,Ali\n\n,\n  ,  \n2,Sara\n,\n,\n"))
+    assert [r["id"] for r in rows] == ["1", "2"]
+
+
+def test_repeated_column_name_is_an_error(tmp_path):
+    with pytest.raises(TableError, match=r"\['price'\] appear more than once"):
+        load_csv(csv_file(tmp_path, "id,price, price \n1,10,5\n"))
+
+
+def test_unnamed_columns_are_not_repeated_names(tmp_path):
+    header, _ = load_csv(csv_file(tmp_path, "id,,,name\n1,,,Ali\n"))
+    assert header == ["id", "", "", "name"]
+
+
+def test_duplicate_key_reports_the_real_line(tmp_path):
+    p = csv_file(tmp_path, 'id,note\n1,"one\ntwo\nthree"\n\n,\n2,x\n1,y\n')
+    _, rows = load_csv(p)
+    assert [r["id"] for r in rows] == ["1", "2", "1"]
+    with pytest.raises(DuplicateKeyError, match="line 8"):
+        diff_rows(rows, rows, ["id"])
+
+
+def test_row_problem_after_a_multi_line_value_reports_its_first_line(tmp_path):
+    p = csv_file(tmp_path, 'id,note\n1,"one\ntwo"\n2,"three\nfour",extra\n')
+    with pytest.raises(TableError, match="line 4"):
+        load_csv(p)
 
 
 def test_compare_options():

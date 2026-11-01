@@ -62,6 +62,48 @@ def test_ignoring_a_new_column_means_the_files_match(tmp_path, capsys):
     assert main([old, new, "-k", "id", "--ignore", "etl_run"]) == 0
 
 
+def test_short_rows_work_in_every_output_format(tmp_path, capsys):
+    import json
+
+    old = write(tmp_path / "old.csv", "id,name,salary\n1,Ali,9000\n")
+    new = write(tmp_path / "new.csv", "id,name,salary\n1,Ali\n3,Omar\n")
+
+    assert main([old, new, "-k", "id", "--color", "never"]) == 1
+    out = capsys.readouterr().out
+    assert "salary: '9000' -> ''" in out
+    assert "None" not in out
+
+    assert main([old, new, "-k", "id", "-f", "markdown"]) == 1
+    assert "| 1 | salary | 9000 |  |" in capsys.readouterr().out
+
+    assert main([old, new, "-k", "id", "-f", "json"]) == 1
+    data = json.loads(capsys.readouterr().out)
+    assert data["changed"][0]["cells"] == {"salary": {"old": "9000", "new": ""}}
+    assert data["added"] == [{"id": "3", "name": "Omar", "salary": ""}]
+
+
+def test_row_with_extra_fields_exits_2_with_its_line(tmp_path, capsys):
+    good = write(tmp_path / "good.csv", "id,city,salary\n1,Doha,9000\n")
+    bad = write(tmp_path / "bad.csv", "id,city,salary\n1,Doha, Qatar,9000\n")
+    assert main([good, bad, "-k", "id"]) == 2
+    captured = capsys.readouterr()
+    assert "bad.csv line 2: 4 fields but the header has 3" in captured.err
+    assert captured.out == ""
+
+
+def test_blank_rows_from_excel_exports_do_not_count(tmp_path, capsys):
+    clean = write(tmp_path / "clean.csv", "id,name\n1,Ali\n")
+    padded = write(tmp_path / "padded.csv", "id,name\n1,Ali\n,\n,\n")
+    assert main([clean, padded, "-k", "id"]) == 0
+
+
+def test_repeated_column_name_exits_2_instead_of_hiding_a_change(tmp_path, capsys):
+    old = write(tmp_path / "old.csv", "id,price,price\n1,10,5\n")
+    new = write(tmp_path / "new.csv", "id,price,price\n1,99,5\n")
+    assert main([old, new, "-k", "id"]) == 2
+    assert "price" in capsys.readouterr().err
+
+
 def _pair(tmp_path):
     old = write(tmp_path / "old.csv", "id,name,salary\n1,Ali,9000\n2,Sara,7000\n")
     new = write(tmp_path / "new.csv", "id,name,salary\n1,Ali,9500\n3,Omar,8000\n")

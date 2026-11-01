@@ -106,8 +106,10 @@ for change in d.changed:
 ## Notes
 
 - Only columns present in both files are compared. Added or removed columns are reported separately, based on each file's header, so a file with a header and no rows still compares correctly.
-- Duplicate keys are treated as an error, since a diff by key would be ambiguous. Use a composite key if one column is not unique.
-- Excel values are compared as text: whole numbers lose the `.0` Excel adds, and dates become `YYYY-MM-DD`. Header names are trimmed.
+- Duplicate keys are treated as an error, since a diff by key would be ambiguous. Use a composite key if one column is not unique. A column name that appears twice in a header is an error for the same reason.
+- A row shorter than the header is read with empty values for the missing cells. Blank rows, including the `,,,` rows Excel writes when saving as CSV, are skipped.
+- A CSV row with values past the last column is an error that names the file and line, because the cells of that row have probably shifted (an unquoted comma, for example). Extra empty fields from a trailing delimiter are fine.
+- Excel values are compared as text: whole numbers lose the `.0` Excel adds, and dates become `YYYY-MM-DD`. Header names are trimmed. Cells to the right of the last named column are outside the table and are left out.
 - Both files are loaded into memory, which is fine for files up to a few hundred MB.
 
 ## Development

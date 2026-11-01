@@ -7,8 +7,18 @@ Row = dict[str, str]
 Key = tuple[str, ...]
 
 
-class DuplicateKeyError(ValueError):
+class TableError(ValueError):
+    """A file that cannot be compared as it stands, such as a row that does not fit the header."""
+
+
+class DuplicateKeyError(TableError):
     pass
+
+
+class SourceRow(dict):
+    """A row that remembers the line it came from, so errors can point at it."""
+
+    __slots__ = ("line",)
 
 
 @dataclass
@@ -73,15 +83,37 @@ def load_xlsx(path: str | Path, sheet: str | None = None) -> tuple[list[str], li
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb[sheet] if sheet else wb.worksheets[0]
     rows_iter = ws.iter_rows(values_only=True)
-    first = next(rows_iter, None) or ()
-    header = [str(h).strip() if h is not None else "" for h in first]
+    header = _clean_header(next(rows_iter, None) or (), path)
     rows = []
-    for values in rows_iter:
-        if values is None or all(v is None for v in values):
+    for line, values in enumerate(rows_iter, start=2):
+        # Unlike a CSV line, an Excel cell cannot shift, so a stray cell past the header is
+        # just outside the table.
+        cells = (values or ())[:len(header)]
+        if all(v is None for v in cells):
             continue
-        rows.append({h: _cell_text(v) for h, v in zip(header, values)})
+        rows.append(_make_row(header, [_cell_text(v) for v in cells], line))
     wb.close()
     return header, rows
+
+
+def _clean_header(cells, source: str | Path) -> list[str]:
+    """Trim header names and drop the empty cells a trailing delimiter leaves behind."""
+    header = [str(c).strip() if c is not None else "" for c in cells]
+    while header and not header[-1]:
+        header.pop()
+    repeated = sorted({h for h in header if h and header.count(h) > 1})
+    if repeated:
+        raise TableError(f"column(s) {repeated} appear more than once in {source}")
+    return header
+
+
+def _make_row(header: list[str], cells: list[str], line: int) -> SourceRow:
+    """Pair cells with the header. Cells a short row does not have come out empty."""
+    if len(cells) < len(header):
+        cells = cells + [""] * (len(header) - len(cells))
+    row = SourceRow(zip(header, cells))
+    row.line = line
+    return row
 
 
 def _cell_text(value) -> str:
@@ -106,7 +138,12 @@ def load_table(path: str | Path, encoding: str = "utf-8-sig", delimiter: str | N
 
 
 def load_csv(path: str | Path, encoding: str = "utf-8-sig", delimiter: str | None = None) -> tuple[list[str], list[Row]]:
-    """Read a CSV file into (header, rows). The delimiter is sniffed if not given."""
+    """Read a CSV file into (header, rows). The delimiter is sniffed if not given.
+
+    Short rows get empty values and blank rows are skipped, as when reading Excel. A row with
+    values past the last column is an error: its cells have probably shifted, so comparing
+    them would give wrong results.
+    """
     with open(path, newline="", encoding=encoding) as f:
         sample = f.read(64 * 1024)
         f.seek(0)
@@ -115,11 +152,19 @@ def load_csv(path: str | Path, encoding: str = "utf-8-sig", delimiter: str | Non
                 delimiter = csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
             except csv.Error:
                 delimiter = ","
-        reader = csv.DictReader(f, delimiter=delimiter)
+        reader = csv.reader(f, delimiter=delimiter)
         # Exports from Excel and some databases often pad header names with spaces.
-        header = [h.strip() for h in reader.fieldnames or []]
-        reader.fieldnames = header
-        rows = [dict(r) for r in reader]
+        header = _clean_header(next((cells for cells in reader if cells), []), path)
+        width = len(header)
+        rows = []
+        end = reader.line_num
+        for cells in reader:
+            start, end = end + 1, reader.line_num  # a quoted value can span several lines
+            if not any(c.strip() for c in cells):
+                continue  # a blank line, or the ",,," Excel writes for an empty row
+            if any(c.strip() for c in cells[width:]):
+                raise TableError(f"{path} line {start}: {len(cells)} fields but the header has {width}")
+            rows.append(_make_row(header, cells, start))
         return header, rows
 
 
@@ -131,7 +176,8 @@ def _index(rows: list[Row], key_columns: list[str], label: str) -> dict[Key, Row
             raise KeyError(f"key column(s) {missing} not found in {label}")
         key = tuple(row[k] for k in key_columns)
         if key in index:
-            raise DuplicateKeyError(f"duplicate key {key} in {label} (line {n})")
+            line = getattr(row, "line", n)
+            raise DuplicateKeyError(f"duplicate key {key} in {label} (line {line})")
         index[key] = row
     return index
 

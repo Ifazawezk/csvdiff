@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 
-from csvdiff.core import CompareOptions, DuplicateKeyError, Diff, diff_rows, load_table
+from csvdiff.core import CompareOptions, Diff, TableError, diff_rows, load_table
 
 
 def format_text(d: Diff, color: bool = False) -> str:
@@ -132,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         old_columns, old = load_table(args.old, args.encoding, args.delimiter, args.sheet)
         new_columns, new = load_table(args.new, args.encoding, args.delimiter, args.sheet)
         d = diff_rows(old, new, keys, opts, old_columns, new_columns)
-    except (OSError, KeyError, DuplicateKeyError, UnicodeDecodeError, ImportError) as e:
+    except (OSError, KeyError, TableError, UnicodeDecodeError, ImportError) as e:
         msg = e.args[0] if isinstance(e, KeyError) else e
         print(f"csvdiff: {msg}", file=sys.stderr)
         return 2
