@@ -1,10 +1,15 @@
 import csv
 import datetime as dt
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 Row = dict[str, str]
 Key = tuple[str, ...]
+
+# Real exports hold cells far bigger than the csv module's default limit of 128 KB. sys.maxsize
+# is not an option here, because on Windows the limit is stored in a 32-bit C long.
+_MAX_FIELD_SIZE = 2**31 - 1
 
 
 class TableError(ValueError):
@@ -80,7 +85,10 @@ def load_xlsx(path: str | Path, sheet: str | None = None) -> tuple[list[str], li
         from openpyxl import load_workbook
     except ImportError:
         raise ImportError("reading .xlsx files needs openpyxl: pip install openpyxl") from None
-    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        wb = load_workbook(path, read_only=True, data_only=True)
+    except zipfile.BadZipFile:
+        raise TableError(f"{path} is not a valid Excel file") from None
     ws = wb[sheet] if sheet else wb.worksheets[0]
     rows_iter = ws.iter_rows(values_only=True)
     header = _clean_header(next(rows_iter, None) or (), path)
@@ -144,6 +152,7 @@ def load_csv(path: str | Path, encoding: str = "utf-8-sig", delimiter: str | Non
     values past the last column is an error: its cells have probably shifted, so comparing
     them would give wrong results.
     """
+    csv.field_size_limit(_MAX_FIELD_SIZE)
     with open(path, newline="", encoding=encoding) as f:
         sample = f.read(64 * 1024)
         f.seek(0)

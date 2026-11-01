@@ -50,12 +50,12 @@ csvdiff export.xlsx export.csv -k id                        # or one of each
 | `--ignore-whitespace` | ignore leading, trailing and repeated spaces |
 | `-f, --format` | `text` (default), `json` or `markdown` |
 | `-s, --summary` | only print the counts |
-| `--delimiter` | field delimiter; detected automatically (`,` `;` tab `\|`) if not given |
+| `--delimiter` | field delimiter, one character or `\t` for a tab; detected automatically (`,` `;` tab `\|`) if not given |
 | `--sheet` | for .xlsx files, the sheet to read (default: the first) |
 | `--encoding` | file encoding, default UTF-8 with or without a BOM (Excel exports work) |
 | `--color` | `auto`, `always` or `never` |
 
-**Exit codes:** `0` when the files match, `1` when there are differences, `2` on errors such as a missing file, a missing key column or a duplicate key. That makes it easy to use in scripts and CI:
+**Exit codes:** `0` when the files match, `1` when there are differences, `2` on errors such as a missing file, a missing key column, a duplicate key or a row that does not fit the header. That makes it easy to use in scripts and CI:
 
 ```bash
 csvdiff expected.csv output.csv -k id --summary || echo "output changed"
@@ -111,6 +111,7 @@ for change in d.changed:
 - A CSV row with values past the last column is an error that names the file and line, because the cells of that row have probably shifted (an unquoted comma, for example). Extra empty fields from a trailing delimiter are fine.
 - Excel values are compared as text: whole numbers lose the `.0` Excel adds, and dates become `YYYY-MM-DD`. Header names are trimmed. Cells to the right of the last named column are outside the table and are left out.
 - Both files are loaded into memory, which is fine for files up to a few hundred MB.
+- Output is always UTF-8, including when it is piped or redirected to a file on Windows.
 
 ## Development
 

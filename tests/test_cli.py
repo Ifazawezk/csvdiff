@@ -1,3 +1,13 @@
+import csv
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+import csvdiff
 from csvdiff.cli import main
 
 
@@ -63,8 +73,6 @@ def test_ignoring_a_new_column_means_the_files_match(tmp_path, capsys):
 
 
 def test_short_rows_work_in_every_output_format(tmp_path, capsys):
-    import json
-
     old = write(tmp_path / "old.csv", "id,name,salary\n1,Ali,9000\n")
     new = write(tmp_path / "new.csv", "id,name,salary\n1,Ali\n3,Omar\n")
 
@@ -104,6 +112,56 @@ def test_repeated_column_name_exits_2_instead_of_hiding_a_change(tmp_path, capsy
     assert "price" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("value", ["\\t", "tab", "\t"])
+def test_delimiter_accepts_a_tab_however_it_is_typed(tmp_path, capsys, value):
+    # The comma in the name would be picked up as the delimiter if the option were ignored.
+    old = write(tmp_path / "old.tsv", "id\tname\n1\tAli, Omar\n")
+    new = write(tmp_path / "new.tsv", "id\tname\n1\tAli, Sara\n")
+    assert main([old, new, "-k", "id", "--delimiter", value, "--color", "never"]) == 1
+    assert "name: 'Ali, Omar' -> 'Ali, Sara'" in capsys.readouterr().out
+
+
+def test_long_delimiter_is_a_usage_error(tmp_path, capsys):
+    a = write(tmp_path / "a.csv", "id,x\n1,2\n")
+    with pytest.raises(SystemExit) as e:
+        main([a, a, "-k", "id", "--delimiter", ";;"])
+    assert e.value.code == 2
+    assert "must be one character" in capsys.readouterr().err
+
+
+def test_unknown_encoding_exits_2(tmp_path, capsys):
+    a = write(tmp_path / "a.csv", "id,x\n1,2\n")
+    assert main([a, a, "-k", "id", "--encoding", "nonsense"]) == 2
+    assert "nonsense" in capsys.readouterr().err
+
+
+def test_cells_over_the_csv_module_limit_are_compared(tmp_path, capsys):
+    old = write(tmp_path / "old.csv", "id,blob\n1," + "x" * 200_000 + "\n")
+    new = write(tmp_path / "new.csv", "id,blob\n1," + "x" * 200_000 + "y\n")
+    assert main([old, new, "-k", "id", "--summary"]) == 1
+    assert capsys.readouterr().out.strip() == "0 added, 0 removed, 1 changed"
+
+
+def test_csv_parser_errors_exit_2(tmp_path, capsys, monkeypatch):
+    def broken(*args):
+        raise csv.Error("line contains NUL")
+
+    monkeypatch.setattr("csvdiff.cli.load_table", broken)
+    assert main(["a.csv", "b.csv", "-k", "id"]) == 2
+    assert "line contains NUL" in capsys.readouterr().err
+
+
+def test_arabic_output_survives_a_legacy_stdout_encoding(tmp_path):
+    old = write(tmp_path / "old.csv", "id,name\n1,مهند\n")
+    new = write(tmp_path / "new.csv", "id,name\n1,عمر\n")
+    src = str(Path(csvdiff.__file__).parents[1])
+    env = {**os.environ, "PYTHONPATH": src, "PYTHONIOENCODING": "cp1252"}
+    run = subprocess.run([sys.executable, "-m", "csvdiff.cli", old, new, "-k", "id", "-f", "json"],
+                         capture_output=True, env=env)
+    assert run.returncode == 1, run.stderr
+    assert json.loads(run.stdout.decode("utf-8"))["changed"][0]["cells"]["name"]["new"] == "عمر"
+
+
 def _pair(tmp_path):
     old = write(tmp_path / "old.csv", "id,name,salary\n1,Ali,9000\n2,Sara,7000\n")
     new = write(tmp_path / "new.csv", "id,name,salary\n1,Ali,9500\n3,Omar,8000\n")
@@ -111,8 +169,6 @@ def _pair(tmp_path):
 
 
 def test_json_output(tmp_path, capsys):
-    import json
-
     old, new = _pair(tmp_path)
     main([old, new, "-k", "id", "-f", "json"])
     data = json.loads(capsys.readouterr().out)

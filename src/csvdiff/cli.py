@@ -1,6 +1,7 @@
 """Command-line interface: csvdiff OLD.csv NEW.csv --key id"""
 
 import argparse
+import csv
 import json
 import sys
 
@@ -98,6 +99,14 @@ def _split(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
+def _delimiter(value: str) -> str:
+    if value in ("\\t", "tab"):  # shells pass '\t' through as a backslash and a t
+        return "\t"
+    if len(value) != 1:
+        raise argparse.ArgumentTypeError(f"must be one character, or \\t for a tab, not {value!r}")
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="csvdiff", description="Compare two CSV files by key.")
     p.add_argument("old", help="the original CSV file")
@@ -111,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ignore-whitespace", action="store_true",
                    help="ignore leading, trailing and repeated spaces")
     p.add_argument("--encoding", default="utf-8-sig", help="file encoding (default utf-8 with or without BOM)")
-    p.add_argument("--delimiter", help="field delimiter (default: detected)")
+    p.add_argument("--delimiter", type=_delimiter, help="field delimiter, \\t for a tab (default: detected)")
     p.add_argument("--sheet", help="for .xlsx files: sheet name (default: the first sheet)")
     p.add_argument("-f", "--format", choices=["text", "json", "markdown"], default="text")
     p.add_argument("-s", "--summary", action="store_true", help="only print the counts")
@@ -121,6 +130,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # Piped or redirected output on Windows defaults to a code page that cannot hold Arabic.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     keys = _split(args.key)
     opts = CompareOptions(
         ignore_columns=tuple(_split(args.ignore)),
@@ -132,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
         old_columns, old = load_table(args.old, args.encoding, args.delimiter, args.sheet)
         new_columns, new = load_table(args.new, args.encoding, args.delimiter, args.sheet)
         d = diff_rows(old, new, keys, opts, old_columns, new_columns)
-    except (OSError, KeyError, TableError, UnicodeDecodeError, ImportError) as e:
+    except (OSError, LookupError, csv.Error, TableError, UnicodeDecodeError, ImportError) as e:
         msg = e.args[0] if isinstance(e, KeyError) else e
         print(f"csvdiff: {msg}", file=sys.stderr)
         return 2

@@ -82,6 +82,19 @@ def test_duplicate_key_reports_the_sheet_row(tmp_path):
         diff_rows(rows, rows, ["id"])
 
 
+def test_file_that_is_not_really_excel_exits_2(tmp_path, capsys):
+    fake = tmp_path / "fake.xlsx"
+    fake.write_text("not a workbook", encoding="utf-8")
+    assert main([str(fake), str(fake), "-k", "id"]) == 2
+    assert "fake.xlsx is not a valid Excel file" in capsys.readouterr().err
+
+
+def test_missing_sheet_exits_2(tmp_path, capsys):
+    p = make_xlsx(tmp_path / "a.xlsx", [["id"], [1]])
+    assert main([p, p, "-k", "id", "--sheet", "Nope"]) == 2
+    assert "Nope" in capsys.readouterr().err
+
+
 def test_compare_excel_with_csv(tmp_path, capsys):
     xlsx = make_xlsx(tmp_path / "jan.xlsx", [["id", "salary"], [1, 9000], [2, 7000]], sheet="Payroll")
     csv_file = tmp_path / "feb.csv"
