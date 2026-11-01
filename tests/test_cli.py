@@ -33,6 +33,21 @@ def test_cli_errors_exit_2(tmp_path, capsys):
     assert "missing.csv" in err and "email" in err
 
 
+def test_header_only_file_does_not_look_like_new_columns(tmp_path, capsys):
+    empty = write(tmp_path / "empty.csv", "id,name\n")
+    full = write(tmp_path / "full.csv", "id,name\n1,Ali\n")
+    assert main([empty, full, "-k", "id", "--color", "never"]) == 1
+    out = capsys.readouterr().out
+    assert "column" not in out
+    assert out.strip().endswith("1 added, 0 removed, 0 changed")
+
+
+def test_wrong_key_is_an_error_even_with_no_rows(tmp_path, capsys):
+    empty = write(tmp_path / "empty.csv", "id,name\n")
+    assert main([empty, empty, "-k", "email"]) == 2
+    assert "email" in capsys.readouterr().err
+
+
 def test_cli_options(tmp_path, capsys):
     old = write(tmp_path / "old.csv", "id,name,price,updated\n1,Ali,10.004,mon\n")
     new = write(tmp_path / "new.csv", "id,name,price,updated\n1,ALI,10.00,tue\n")

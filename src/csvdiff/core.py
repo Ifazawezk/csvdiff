@@ -136,15 +136,30 @@ def _index(rows: list[Row], key_columns: list[str], label: str) -> dict[Key, Row
     return index
 
 
+def _columns(rows: list[Row], header: list[str] | None, key_columns: list[str], label: str) -> list[str]:
+    """A file's columns: its header if we have one, otherwise the keys of its first row."""
+    if header is None:
+        return list(rows[0]) if rows else []
+    missing = [k for k in key_columns if k not in header]
+    if missing:
+        raise KeyError(f"key column(s) {missing} not found in {label}")
+    return list(header)
+
+
 def diff_rows(old: list[Row], new: list[Row], key_columns: list[str],
-              options: CompareOptions | None = None) -> Diff:
-    """Match rows by key_columns and compare the columns both files share."""
+              options: CompareOptions | None = None,
+              old_columns: list[str] | None = None, new_columns: list[str] | None = None) -> Diff:
+    """Match rows by key_columns and compare the columns both files share.
+
+    Pass the headers from load_table as old_columns and new_columns. Without them the
+    columns are read from the first row, so a table with no rows appears to have none.
+    """
     opts = options or CompareOptions()
+    old_cols = _columns(old, old_columns, key_columns, "old file")
+    new_cols = _columns(new, new_columns, key_columns, "new file")
     old_idx = _index(old, key_columns, "old file")
     new_idx = _index(new, key_columns, "new file")
 
-    old_cols = list(old[0]) if old else []
-    new_cols = list(new[0]) if new else []
     shared = [c for c in old_cols if c in new_cols and c not in key_columns and c not in opts.ignore_columns]
 
     d = Diff(

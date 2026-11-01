@@ -95,16 +95,17 @@ Columns added: manager. Columns removed: none.
 ```python
 from csvdiff import CompareOptions, diff_rows, load_csv
 
-_, old = load_csv("jan.csv")
-_, new = load_csv("feb.csv")
-d = diff_rows(old, new, ["id"], CompareOptions(tolerance=0.01))
+old_columns, old = load_csv("jan.csv")
+new_columns, new = load_csv("feb.csv")
+d = diff_rows(old, new, ["id"], CompareOptions(tolerance=0.01),
+              old_columns=old_columns, new_columns=new_columns)
 for change in d.changed:
     print(change.key, change.cells)
 ```
 
 ## Notes
 
-- Only columns present in both files are compared. Added or removed columns are reported separately.
+- Only columns present in both files are compared. Added or removed columns are reported separately, based on each file's header, so a file with a header and no rows still compares correctly.
 - Duplicate keys are treated as an error, since a diff by key would be ambiguous. Use a composite key if one column is not unique.
 - Excel values are compared as text: whole numbers lose the `.0` Excel adds, and dates become `YYYY-MM-DD`. Header names are trimmed.
 - Both files are loaded into memory, which is fine for files up to a few hundred MB.

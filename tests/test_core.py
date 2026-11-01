@@ -60,6 +60,26 @@ def test_missing_key_column():
         diff_rows(OLD, NEW, ["email"])
 
 
+def test_headers_decide_column_changes_when_a_file_has_no_rows():
+    d = diff_rows([], NEW, ["id"], None, list(NEW[0]), list(NEW[0]))
+    assert d.columns_added == []
+    assert d.columns_removed == []
+    assert [r["id"] for r in d.added] == ["1", "3", "4"]
+
+
+def test_real_column_change_still_reported_when_a_file_has_no_rows():
+    d = diff_rows([], [], ["id"], None, ["id", "city"], ["id", "team"])
+    assert d.columns_added == ["team"]
+    assert d.columns_removed == ["city"]
+
+
+def test_missing_key_column_in_a_header_with_no_rows():
+    with pytest.raises(KeyError, match="old file"):
+        diff_rows([], NEW, ["id"], None, ["name"], list(NEW[0]))
+    with pytest.raises(KeyError, match="new file"):
+        diff_rows(OLD, [], ["id"], None, list(OLD[0]), ["name"])
+
+
 def test_load_csv_sniffs_delimiter(tmp_path):
     p = tmp_path / "semi.csv"
     p.write_text("id;name\n1;Ali\n2;Sara\n", encoding="utf-8")
