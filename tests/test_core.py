@@ -106,6 +106,16 @@ def test_compare_options():
     assert diff_rows(old, new, ["id"], opts).is_empty
 
 
+def test_ignored_columns_are_left_out_of_column_changes():
+    from csvdiff.core import CompareOptions
+
+    old = [{"id": "1", "city": "Doha", "old_run": "5"}]
+    new = [{"id": "1", "city": "Doha", "new_run": "6", "team": "data"}]
+    d = diff_rows(old, new, ["id"], CompareOptions(ignore_columns=("old_run", "new_run")))
+    assert d.columns_removed == []
+    assert d.columns_added == ["team"]  # columns not named in --ignore are still reported
+
+
 def test_tolerance_handles_thousands_separators():
     from csvdiff.core import CompareOptions
 

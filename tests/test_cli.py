@@ -55,6 +55,13 @@ def test_cli_options(tmp_path, capsys):
     assert main([old, new, "-k", "id", "--ignore", "updated", "-t", "0.01", "--ignore-case"]) == 0
 
 
+def test_ignoring_a_new_column_means_the_files_match(tmp_path, capsys):
+    old = write(tmp_path / "old.csv", "id,name\n1,Ali\n")
+    new = write(tmp_path / "new.csv", "id,name,etl_run\n1,Ali,77\n")
+    assert main([old, new, "-k", "id"]) == 1
+    assert main([old, new, "-k", "id", "--ignore", "etl_run"]) == 0
+
+
 def _pair(tmp_path):
     old = write(tmp_path / "old.csv", "id,name,salary\n1,Ali,9000\n2,Sara,7000\n")
     new = write(tmp_path / "new.csv", "id,name,salary\n1,Ali,9500\n3,Omar,8000\n")

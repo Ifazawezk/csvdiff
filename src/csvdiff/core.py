@@ -164,8 +164,8 @@ def diff_rows(old: list[Row], new: list[Row], key_columns: list[str],
 
     d = Diff(
         key_columns=key_columns,
-        columns_added=[c for c in new_cols if c not in old_cols],
-        columns_removed=[c for c in old_cols if c not in new_cols],
+        columns_added=[c for c in new_cols if c not in old_cols and c not in opts.ignore_columns],
+        columns_removed=[c for c in old_cols if c not in new_cols and c not in opts.ignore_columns],
     )
     for key, row in new_idx.items():
         if key not in old_idx:

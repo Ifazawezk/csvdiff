@@ -44,7 +44,7 @@ csvdiff export.xlsx export.csv -k id                        # or one of each
 | Option | |
 |---|---|
 | `-k, --key` | column(s) that identify a row, comma separated (required) |
-| `-i, --ignore` | columns to leave out of the comparison |
+| `-i, --ignore` | columns to leave out of the comparison, including when they are added or removed |
 | `-t, --tolerance` | numbers within this difference count as equal; thousands separators are handled |
 | `--ignore-case` | compare text case-insensitively |
 | `--ignore-whitespace` | ignore leading, trailing and repeated spaces |
