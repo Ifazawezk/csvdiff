@@ -1,8 +1,18 @@
 # csvdiff
 
-Compare two CSV files row by row, matched by a key column, and see exactly what was added, removed and changed. Useful for checking a new data export against last month's, reviewing changes to a lookup table, or testing that a pipeline still produces the same output.
+Compare two CSV or Excel files by a key column and see which rows were added, removed or changed. Handy for checking a new export against last month's, or for making sure a pipeline still produces the same output.
 
-Works with CSV and Excel (.xlsx) files. Pure Python; reading Excel needs `openpyxl`.
+## Install
+
+```bash
+pip install git+https://github.com/Ifazawezk/csvdiff.git
+# with Excel support:
+pip install "csvdiff-cli[excel] @ git+https://github.com/Ifazawezk/csvdiff.git"
+```
+
+It's pure Python. Reading .xlsx files needs `openpyxl`, which the second command installs.
+
+## Example
 
 ```
 $ csvdiff examples/employees_jan.csv examples/employees_feb.csv --key id
@@ -16,17 +26,7 @@ $ csvdiff examples/employees_jan.csv examples/employees_feb.csv --key id
 1 added, 1 removed, 2 changed; columns: 1 added, 0 removed
 ```
 
-Rows are matched by key, so row order does not matter.
-
-## Install
-
-```bash
-pip install git+https://github.com/Ifazawezk/csvdiff.git
-# with Excel support:
-pip install "csvdiff-cli[excel] @ git+https://github.com/Ifazawezk/csvdiff.git"
-```
-
-## Usage
+Rows are matched by key, so their order in the file doesn't matter. Some other ways to call it:
 
 ```bash
 csvdiff old.csv new.csv --key id
@@ -40,6 +40,10 @@ csvdiff a.csv b.csv -k id --summary                         # just the counts
 csvdiff january.xlsx february.xlsx -k id --sheet Payroll    # Excel files
 csvdiff export.xlsx export.csv -k id                        # or one of each
 ```
+
+`--format markdown` prints the counts, the added and removed columns, and tables of the added, removed and changed rows, ready to paste into a pull request.
+
+## Options
 
 | Option | |
 |---|---|
@@ -55,42 +59,15 @@ csvdiff export.xlsx export.csv -k id                        # or one of each
 | `--encoding` | file encoding, default UTF-8 with or without a BOM (Excel exports work) |
 | `--color` | `auto`, `always` or `never` |
 
-**Exit codes:** `0` when the files match, `1` when there are differences, `2` on errors such as a missing file, a missing key column, a duplicate key or a row that does not fit the header. That makes it easy to use in scripts and CI:
+## Exit codes
+
+`0` if the files match, `1` if they differ, and `2` on errors such as a missing file, a missing key column, a duplicate key or a row that doesn't fit the header. That makes it easy to use in a script or CI job:
 
 ```bash
 csvdiff expected.csv output.csv -k id --summary || echo "output changed"
 ```
 
-## Markdown output
-
-```
-$ csvdiff examples/employees_jan.csv examples/employees_feb.csv -k id -f markdown
-```
-
-**1 added, 1 removed, 2 changed**
-
-Columns added: manager. Columns removed: none.
-
-### Added
-
-| id | name | department | salary | manager |
-|---|---|---|---|---|
-| 105 | Mona Fathy | Sales | 7200 | 104 |
-
-### Removed
-
-| id | name | department | salary |
-|---|---|---|---|
-| 102 | Sara Adel | Sales | 7000 |
-
-### Changed
-
-| id | column | old | new |
-|---|---|---|---|
-| 101 | salary | 9000 | 9500 |
-| 104 | department | HR | Finance |
-
-## Use it from Python
+## From Python
 
 ```python
 from csvdiff import CompareOptions, diff_rows, load_csv
@@ -103,15 +80,15 @@ for change in d.changed:
     print(change.key, change.cells)
 ```
 
-## Notes
+## Limits
 
-- Only columns present in both files are compared. Added or removed columns are reported separately, based on each file's header, so a file with a header and no rows still compares correctly.
-- Duplicate keys are treated as an error, since a diff by key would be ambiguous. Use a composite key if one column is not unique. A column name that appears twice in a header is an error for the same reason.
-- A row shorter than the header is read with empty values for the missing cells. Blank rows, including the `,,,` rows Excel writes when saving as CSV, are skipped.
-- A CSV row with values past the last column is an error that names the file and line, because the cells of that row have probably shifted (an unquoted comma, for example). Extra empty fields from a trailing delimiter are fine.
-- Excel values are compared as text: whole numbers lose the `.0` Excel adds, and dates become `YYYY-MM-DD`. Header names are trimmed. Cells to the right of the last named column are outside the table and are left out.
-- Both files are loaded into memory, which is fine for files up to a few hundred MB.
-- Output is always UTF-8, including when it is piped or redirected to a file on Windows.
+Only columns present in both files are compared. Added and removed columns are reported from each file's header, so a file with a header and no rows still compares correctly. Duplicate keys are an error because a diff by key would be ambiguous; use a composite key if one column isn't unique. A column name that appears twice in a header is an error for the same reason.
+
+A row shorter than the header gets empty values for the missing cells. Blank rows are skipped, including the `,,,` rows Excel writes when saving as CSV. A row with values past the last column is an error that names the file and line, since its cells have probably shifted (an unquoted comma, for example). Extra empty fields from a trailing delimiter are fine.
+
+Excel values are compared as text: whole numbers lose the `.0` Excel adds, dates become `YYYY-MM-DD`, header names are trimmed, and cells to the right of the last named column are left out.
+
+Both files are loaded into memory, which is fine up to a few hundred MB. Output is always UTF-8, even when piped or redirected to a file on Windows.
 
 ## Development
 
